@@ -60,27 +60,27 @@ The **supervisor** orchestrates delegation to each specialist in turn and then a
 
 2. **Create & activate a virtual environment**
    ```bash
-  uv venv
+   uv venv
    ```
 
 3. **Install dependencies**
-  ```bash
-  make graph-install
+   ```bash
+   make graph-install
    ```
 
 ## Configuration
 Create a .env file in the project root with your OpenAI API credentials:
 
-  ```bash
-  OPENAI_API_KEY=sk-...
-  ```
+   ```bash
+   OPENAI_API_KEY=sk-...
+   ```
 
 
 ## Usage
 To run the demo:
 
 **Run**
-  ```bash
-  make
-  ```
+   ```bash
+   make graph-start
+   ```
 
