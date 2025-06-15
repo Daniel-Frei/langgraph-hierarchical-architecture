@@ -80,3 +80,5 @@ Desktop.ini
 
 # LangGraph data (if any)
 *.jsonl
+.langgraph_api/
+.langgraph_api
