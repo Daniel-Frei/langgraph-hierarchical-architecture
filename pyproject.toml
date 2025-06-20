@@ -2,7 +2,7 @@
 name = "car-color-graph"
 version = "0.1.0"
 description = "LangGraph supervisor/subgraph demo – the car is blue."
-requires-python = ">=3.10"
+requires-python = ">=3.13.3,<3.14"
 dependencies = [
     "langgraph==0.4.8",
     "langgraph-supervisor==0.0.27",
