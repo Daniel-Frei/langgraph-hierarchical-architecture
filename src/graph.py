@@ -1,6 +1,7 @@
 # src\graph.py
 from src.logger import getLogger
 from dotenv import load_dotenv
+import random
 
 from langgraph_supervisor import create_supervisor
 from langgraph.graph import StateGraph, START
@@ -37,8 +38,8 @@ supervisor = create_supervisor(
 def ensure_defaults(state: SharedState):
     return {
         "halfSentence": "The car is ",
-        "color": "",
-        "speed": "slow",
+        "color": random.choice(["", "crimson-pink"]),
+        "speed": random.choice(["", "snail-paced"]),
         "fullSentence": "",
         "remaining_steps": 15,
     }
