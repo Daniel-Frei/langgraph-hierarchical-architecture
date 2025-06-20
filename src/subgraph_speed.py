@@ -6,7 +6,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, AIMessage
 
 from state import SharedState
-from tools import set_state, ask_user, get_state
+from tools import make_set_state, make_ask_user, get_state
 
 logging.getLogger(__name__).setLevel(logging.DEBUG)
 
@@ -15,19 +15,19 @@ _SYSTEM_PROMPT = (
     "First call the `get_state` tool with {\"key\": \"speed\"} to see if a "
     "speed adjective is already stored.\n"
     "• If the returned value is non-empty, your job is done \n"
-    "`set_state` with that same value and finish."
-    "• otherwise, call the `ask_user` tool to ask the user: "
-    "\"What colour should the car be?\".\n"
-    "After the user replies, call `set_state` with:\n"
-    "  {\"key\": \"color\", \"value\": \"<their answer>\", "
-    "\"msg_key_in_state\": \"messagesColor\"}"
+    "• otherwise, call the `ask_user_speed` tool to ask the user: "
+    "\"What speed should the car be?\".\n"
+    "After the user replies, call `set_speed_state` with:\n"
+    "  {\"key\": \"speed\", \"value\": \"<their answer>\"}"
 )
 
+ask_user_speed = make_ask_user("messagesSpeed", "ask_user_speed")
+set_speed_state = make_set_state("messagesSpeed", "set_speed_state")
 
 def ask_for_speed(state: SharedState):
     """LLM node that asks the speed specialist to pick a word and call the tool."""
     logging.debug("[speed_agent.ask_for_speed] entry state: %r", state)
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0).bind_tools([set_state, ask_user, get_state])
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0).bind_tools([set_speed_state, ask_user_speed, get_state])
     messages = [SystemMessage(content=_SYSTEM_PROMPT)] + state.get("messagesSpeed", [])
 
     ai: AIMessage = llm.invoke(messages)
@@ -58,13 +58,13 @@ def make_tools_router(messages_key: str = "messages"):
 # ── build the mini‑graph ─────────────────────────────────────────
 builder = StateGraph(SharedState)
 builder.add_node("llm", ask_for_speed)
-builder.add_node("tools", ToolNode([get_state, set_state, ask_user], messages_key="messagesSpeed"))
+builder.add_node("tools", ToolNode([get_state, set_speed_state, ask_user_speed], messages_key="messagesSpeed"))
 builder.add_node("returnMsg", return_msg)
 
 builder.add_edge(START, "llm")
 builder.add_edge("tools", "llm")
 builder.add_conditional_edges("llm",
-    make_tools_router("messagesColor"),
+    make_tools_router("messagesSpeed"),
     {"tools": "tools", END: "returnMsg"},
 )
 builder.add_edge("returnMsg", END)
