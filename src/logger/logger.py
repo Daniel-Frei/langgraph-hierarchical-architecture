@@ -1,4 +1,4 @@
-# File: src/logger.py
+# File: src\logger\logger.py
 
 import logging
 
@@ -47,11 +47,17 @@ class LastChunkFilter(logging.Filter):
         # All other messages should be logged normally:
         return True
 
-# 3) Attach that filter to the root logger (so it sees every record).
+
 for handler in logging.root.handlers:
     handler.addFilter(LastChunkFilter())
 
-# 4) Keep getLogger as before:
+
+def dump_tools(label: str, tools: list):
+    names = [t.name if hasattr(t, "name") else getattr(t, "__name__", str(t))
+             for t in tools]
+    getLogger(__name__).debug("%s bound tools: %s", label, names)
+
+
 def getLogger(name: str, level: int = default_level) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(level)

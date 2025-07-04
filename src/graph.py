@@ -1,14 +1,15 @@
 # src\graph.py
-from src.logger import getLogger
+from logger.logger import getLogger
 from dotenv import load_dotenv
 import random
+from typing import Any, Dict
 
-from langgraph_supervisor import create_supervisor
+from helpers.supervisor import create_supervisor
 from langgraph.graph import StateGraph, START
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 
-from state import SharedState
+from state.main_state import SharedState
 from subgraph_color import color_agent
 from subgraph_speed import speed_agent
 
@@ -35,18 +36,33 @@ supervisor = create_supervisor(
 ).compile(name="supervisor")
 
 # 2️⃣  Node functions
-def ensure_defaults(state: SharedState):
+def ensure_defaults(state: SharedState) -> Dict[str, Any]:
+    # Set default values
+    halfSentence = "The car is "
+    color = random.choice(["", "crimson-pink"])
+    speed = random.choice(["", "snail-paced"])
+    fullSentence = ""
+    remaining_steps = 15
+
+    # Log at INFO level to verify defaults
+    logger.info(
+        f"[ensure_defaults] halfSentence={halfSentence!r}, "
+        f"color={color!r}, speed={speed!r}, "
+        f"fullSentence={fullSentence!r}, remaining_steps={remaining_steps}"
+    )
+
     return {
-        "halfSentence": "The car is ",
-        "color": random.choice(["", "crimson-pink"]),
-        "speed": random.choice(["", "snail-paced"]),
-        "fullSentence": "",
-        "remaining_steps": 15,
+        "halfSentence": halfSentence,
+        "color": color,
+        "speed": speed,
+        "fullSentence": fullSentence,
+        "remaining_steps": remaining_steps,
     }
+
 def assemble(state: SharedState):
     logger.debug(f"[assemble] entry state: {state!r}")
-    color = state.get("color", "").strip()
-    speed = state.get("speed", "").strip()
+    color = (state.color or "").strip()
+    speed = (state.speed or "").strip()
 
     if not color:
         logger.error("[assemble] missing color in state, raising")
@@ -55,11 +71,11 @@ def assemble(state: SharedState):
         logger.error("[assemble] missing speed in state, raising")
         raise ValueError("assemble(): ‘speed’ must be non-empty")
 
-    sentence = f"{state['halfSentence']}{color} and {speed}"
+    sentence = f"{state.halfSentence}{color} and {speed}"
     logger.debug(f"[assemble] built sentence: {sentence!r}")
     return {
         "fullSentence": sentence,
-        "messages": state["messages"]
+        "messages": state.messages
         + [SystemMessage(content=f"combined into '{sentence}'")],
     }
 

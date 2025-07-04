@@ -1,11 +1,12 @@
 # src\subgraph_speed.py
 import logging
+import pprint
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, AIMessage
 
-from state import SharedState
+from state.main_state import SharedState
 from tools import make_set_state, make_ask_user, get_state
 
 logging.getLogger(__name__).setLevel(logging.DEBUG)
@@ -28,7 +29,7 @@ def ask_for_speed(state: SharedState):
     """LLM node that asks the speed specialist to pick a word and call the tool."""
     logging.debug("[speed_agent.ask_for_speed] entry state: %r", state)
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0).bind_tools([set_speed_state, ask_user_speed, get_state])
-    messages = [SystemMessage(content=_SYSTEM_PROMPT)] + state.get("messagesSpeed", [])
+    messages = [SystemMessage(content=_SYSTEM_PROMPT)] + state.messagesSpeed
 
     ai: AIMessage = llm.invoke(messages)
     ai.name = "speed_agent"
@@ -38,20 +39,34 @@ def ask_for_speed(state: SharedState):
 
 def return_msg(state: SharedState):
     """Once the adjective has been stored, inform the supervisor thread."""
-    if not state.get("speed"):
+    if not state.speed:
         # Still waiting for a value – keep the loop alive silently.
         return {}
 
     logging.debug("[speed_agent.return_msg] Adding message for supervisor")
-    public = AIMessage(content="speed_agent has chosen the speed: " + state.get("speed"), name="speed_agent")
+    public = AIMessage(content="speed_agent has chosen the speed: " + state.speed, name="speed_agent")
     return {
         "messages": [public],          # supervisor thread
         "messagesSpeed": [public],
     }
 
 def make_tools_router(messages_key: str = "messages"):
-    def _router(state):
-        return tools_condition(state, messages_key=messages_key)
+    def _router(state: SharedState):
+        msgs = getattr(state, messages_key)
+
+        last = msgs[-1] if msgs else None
+        logging.debug(
+            "[router:%s] last type=%s has_attr.tool_calls=%s content=%s",
+            messages_key,
+            type(last).__name__ if last else None,
+            hasattr(last, "tool_calls"),
+            pprint.pformat(getattr(last, "tool_calls", None)),
+        )
+
+        branch = tools_condition({ "__dummy__": True, messages_key: msgs },
+                                 messages_key = messages_key)
+        logging.debug("[router:%s] tools_condition → %s", messages_key, branch)
+        return branch
     return _router
 
 
