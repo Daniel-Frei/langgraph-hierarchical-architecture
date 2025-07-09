@@ -1,71 +1,51 @@
 # src\tools\set_state.py
 from __future__ import annotations
 
-from typing import Annotated, get_type_hints
-from pydantic import ValidationError
+from typing import Annotated, Type, get_type_hints
+from pydantic import BaseModel, ValidationError
 
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool, InjectedToolCallId
 from langgraph.types import Command
-
-from state.main_state import SharedState
 
 from src.logger.logger import getLogger
 
 logger = getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Helper – validate the write against the global SupervisorState schema
-# ---------------------------------------------------------------------------
-def _validated_kv(key: str, value: str) -> dict:
-    """
-    Return `{key: value}` if the pair is compatible with `SupervisorState`,
-    otherwise raise `ValidationError`.
-    """
-    SharedState.model_validate({key: value})
-    return {key: value}
-
-
-# def _set_state_impl(
-#     *,
-#     key: str,
-#     value: str,
-#     tool_call_id: str,
-#     msg_key_in_state: Optional[str] = None,
-# ) -> Command:
-#     msg_key = msg_key_in_state or "messages"
-#     logger.info("[set_state] key=%s value=%s (overwrite)", key, value)
-#     return Command(
-#         update={
-#             key: value,
-#             msg_key: [
-#                 ToolMessage(
-#                     content=f"{key.capitalize()} set to {value} [overwriting previous value if any]",
-#                     name="set_state",
-#                     tool_call_id=tool_call_id,
-#                 )
-#             ],
-#         }
-#     )
-
-
-def make_set_state(msg_key: str, name: str):
+def make_set_state(
+    msg_key: str | None = None,
+    name: str | None = None,
+    state_schema: Type[BaseModel] | None = None,
+):
     """
     Parameters
     ----------
-    msg_key : str
-        Where the resulting ToolMessage(s) should be appended in the *caller’s*
-        local state (e.g. "messagesInitQuestions").  Falls back to "messages".
-    name : str
-        Public name exposed to the LLM.
-
-    The returned tool **never** mutates the live state object directly – it
-    only returns a `Command(update=…)` describing the desired change.
+    msg_key : str, optional
+        Where the resulting ToolMessage(s) should be appended (e.g. "messagesInitQuestions"). Defaults to "messages".
+    name : str, optional
+        Public name exposed to the LLM. Defaults to **"set_state"**.
+    state_schema : pydantic.BaseModel **required**
+        Schema used for validation.  **Must** be provided; absence raises
+        during build so runtime never crashes.
     """
 
+    def _validated_kv(key: str, value: str) -> dict[str, str]:
+        state_schema.model_validate({key: value})
+        return {key: value}
+
+    # ---- build-time guard --------------------------------------------------
+    if state_schema is None:
+        logger.critical("[set_state] No state_schema provided – aborting build.")
+        raise ValueError(
+            "make_set_state(...) requires a `state_schema` argument."
+        )
+
+    tool_name      = name or "set_state"
+    target_msg_key = msg_key or "messages"
+
     @tool(
-        name,
+        tool_name,
         description=(
             """Write a value in the shared state.
 
@@ -94,10 +74,36 @@ def make_set_state(msg_key: str, name: str):
         value: str,
         tool_call_id: Annotated[str, InjectedToolCallId],
     ) -> Command:
-        # Where to store the confirmation/error message
-        target_msg_key = msg_key or "messages"
 
-        if key not in get_type_hints(SharedState):
+        # ---- runtime validation -------------------------------------------
+        if not isinstance(key, str):
+            logger.error("[set_state] key must be str, got %s", type(key))
+            return Command(
+                update={
+                    target_msg_key: [
+                        ToolMessage(
+                            content="ERROR: ‘key’ must be a string.",
+                            name="set_state",
+                            tool_call_id=tool_call_id,
+                        )
+                    ]
+                }
+            )
+        if not isinstance(value, str):
+            logger.error("[set_state] value must be str, got %s", type(value))
+            return Command(
+                update={
+                    target_msg_key: [
+                        ToolMessage(
+                            content="ERROR: ‘value’ must be a string.",
+                            name="set_state",
+                            tool_call_id=tool_call_id,
+                        )
+                    ]
+                }
+            )
+
+        if key not in get_type_hints(state_schema):
             logger.error("[set_state] Unknown state field: %s", key)
             return Command(
                 update={
@@ -106,7 +112,7 @@ def make_set_state(msg_key: str, name: str):
                             content=(
                                 f"ERROR: '{key}' is not a valid field in the state."
                             ),
-                            name="set_state",
+                             name=tool_name,
                             tool_call_id=tool_call_id,
                         )
                     ]
@@ -126,7 +132,7 @@ def make_set_state(msg_key: str, name: str):
             update_dict[target_msg_key] = [
                 ToolMessage(
                     content=f"{key} updated.",
-                    name="set_state",
+                    name=tool_name,
                     tool_call_id=tool_call_id,
                 )
             ]
@@ -142,7 +148,7 @@ def make_set_state(msg_key: str, name: str):
                     target_msg_key: [
                         ToolMessage(
                             content=f"ERROR: {err.errors()[0]['msg']}",
-                            name="set_state",
+                            name=tool_name,
                             tool_call_id=tool_call_id,
                         )
                     ]
